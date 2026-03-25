@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>今日待办</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<script src="../../node_modules/sortablejs/Sortable.min.js"></script>
+<style>
+  body { width: 270px; min-height: 200px; }
+  .widget { height: 100vh; display: flex; flex-direction: column; }
+
+  .section-bar { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px 2px; }
+  .section-label { font-size: 11px; font-weight: 600; color: var(--text-tertiary); letter-spacing: 0.06em; }
+  .filter-tabs { display: flex; gap: 4px; }
+  .filter-tab { font-size: 10px; padding: 2px 7px; border-radius: 10px; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; transition: all 0.12s; }
+  .filter-tab.active { background: var(--color-orange); color: white; }
+
+  .todo-list { padding: 0 8px; flex: 1; overflow-y: auto; }
+  .todo-item { display: flex; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 8px; transition: background 0.12s; }
+  .todo-item:hover { background: rgba(0,0,0,0.04); }
+  .todo-item.done .todo-text { text-decoration: line-through; color: var(--text-tertiary); }
+  .todo-check { width: 16px; height: 16px; border-radius: 3px; border: 1.5px solid rgba(0,0,0,0.22); flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .todo-check.checked { background: var(--color-green); border-color: var(--color-green); }
+  .todo-check.checked::after { content: ''; width: 8px; height: 5px; border-left: 2px solid white; border-bottom: 2px solid white; transform: rotate(-45deg) translateY(-1px); }
+  .priority-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .priority-high { background: var(--color-orange); }
+  .priority-normal { background: var(--color-blue); }
+  .priority-low { background: var(--text-tertiary); }
+  .todo-text { flex: 1; font-size: 13px; line-height: 1.4; }
+  .todo-date { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; cursor: pointer; padding: 2px 5px; border-radius: 4px; transition: background 0.12s; }
+  .todo-date:hover { background: rgba(0,0,0,0.06); }
+  .todo-done-tag { font-size: 9px; color: var(--color-green); background: rgba(34,197,94,0.1); padding: 1px 6px; border-radius: 8px; flex-shrink: 0; font-weight: 600; letter-spacing: 0.03em; }
+
+  .add-area { padding: 4px 8px 10px; }
+  #btnAdd { opacity: 0; transition: opacity 0.18s ease; }
+  .widget:hover #btnAdd { opacity: 1; }
+  .add-input-row { display: none; flex-direction: column; gap: 6px; margin-top: 6px; }
+  .add-input-row.visible { display: flex; }
+  .add-row-main { display: flex; gap: 6px; align-items: center; }
+  .add-row-opts { display: flex; gap: 6px; align-items: center; }
+  .priority-select { font-size: 11px; padding: 4px 6px; border: 1.5px solid rgba(0,0,0,0.12); border-radius: 6px; background: transparent; color: var(--text-secondary); outline: none; cursor: pointer; }
+  .date-input { font-size: 11px; padding: 4px 6px; border: 1.5px solid rgba(0,0,0,0.12); border-radius: 6px; background: transparent; color: var(--text-secondary); outline: none; flex: 1; }
+  .date-input:focus { border-color: var(--color-orange); }
+  .btn-confirm { padding: 6px 12px; background: var(--color-orange); color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; flex-shrink: 0; transition: opacity 0.15s; }
+  .btn-confirm:hover { opacity: 0.85; }
+  .empty-tip { text-align: center; font-size: 12px; color: var(--text-tertiary); padding: 20px 0; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="titlebar">
+    <span class="titlebar-title">☑️ 待办</span>
+    <button class="btn-pin" id="btnPin" onclick="togglePin()" title="固定在最上层">📌</button>
+    <div class="opacity-slider-wrap" title="调节透明度">
+      <span class="opacity-icon">◐</span>
+      <input class="opacity-slider" id="opacitySlider" type="range" min="0.15" max="1" step="0.01" value="0.72">
+    </div>
+    <div class="titlebar-dots">
+      <button class="dot close" onclick="window.api.closeWindow()" title="关闭"></button>
+      <button class="dot min"   onclick="window.api.minimizeWindow()" title="最小化"></button>
+      <button class="dot max"   onclick="toggleOpacitySlider()" title="透明度"></button>
+    </div>
+  </div>
+  <div class="section-bar">
+    <span class="section-label" id="sectionLabel">今日</span>
+    <div class="filter-tabs">
+      <button class="filter-tab active" data-filter="today" onclick="setFilter('today')">今日</button>
+      <button class="filter-tab" data-filter="all"   onclick="setFilter('all')">全部</button>
+    </div>
+  </div>
+  <div class="todo-list" id="todoList"></div>
+  <div class="add-area">
+    <button class="btn-add" id="btnAdd" onclick="showAddInput()"><span>＋</span><span>添加待办</span></button>
+    <div class="add-input-row" id="addRow">
+      <div class="add-row-main">
+        <input class="input-inline" id="addInput" placeholder="新待办..." onkeydown="handleAddKey(event)">
+        <button class="btn-confirm" onclick="confirmAdd()">添加</button>
+      </div>
+      <div class="add-row-opts">
+        <select class="priority-select" id="prioritySelect">
+          <option value="high">🔴 高</option>
+          <option value="normal" selected>🔵 普通</option>
+          <option value="low">⚪ 低</option>
+        </select>
+        <input class="date-input" id="dateInput" type="date" title="选择日期">
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../../shared/widget.js"></script>
+<script>
+const now = new Date()
+function todayKey() {
+  return `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`
+}
+function fmtKey(dateStr) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr + 'T00:00:00')
+  const today = todayKey()
+  const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  if (key === today) return '\u4ECA\u5929'
+  return `${d.getMonth()+1}/${d.getDate()}`
+}
+
+let data = null, todos = [], sortable = null
+let currentFilter = 'today'
+let filterDateKey = null
+
+document.getElementById('dateInput').value = todayKey()
+
+async function load() {
+  data = await window.api.getData()
+  todos = data.todos || []
+  todos.forEach(t => { if (!t.dateKey) t.dateKey = todayKey() })
+  render()
+}
+async function save() { data.todos = todos; await window.api.saveData(data) }
+
+function setFilter(f) {
+  currentFilter = f
+  filterDateKey = null
+  document.querySelectorAll('.filter-tab').forEach(el => el.classList.toggle('active', el.dataset.filter === f))
+  render()
+}
+
+function applyDateFilter(key) {
+  filterDateKey = key
+  currentFilter = 'date'
+  document.querySelectorAll('.filter-tab').forEach(el => el.classList.remove('active'))
+  const d = new Date(key + 'T00:00:00')
+  document.getElementById('sectionLabel').textContent = `${d.getMonth()+1}\u6708${d.getDate()}\u65E5`
+  render()
+}
+
+window.addEventListener('storage', e => {
+  if (e.key === 'cal-select-date' && e.newValue) applyDateFilter(e.newValue)
+})
+
+function getFilteredTodos() {
+  if (filterDateKey) return todos.filter(t => t.dateKey === filterDateKey)
+  if (currentFilter === 'today') return todos.filter(t => t.dateKey === todayKey())
+  return todos
+}
+
+function render() {
+  if (currentFilter === 'today' && !filterDateKey) {
+    document.getElementById('sectionLabel').textContent = '\u4ECA\u65E5'
+  } else if (currentFilter === 'all') {
+    document.getElementById('sectionLabel').textContent = '\u5168\u90E8'
+  }
+
+  const filtered = getFilteredTodos()
+  const list = document.getElementById('todoList')
+
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-tip">\u6682\u65E0\u5F85\u529E \u2728</div>`
+    if (sortable) { sortable.destroy(); sortable = null }
+    return
+  }
+
+  list.innerHTML = filtered.map(t => `
+    <div class="todo-item ${t.done ? 'done' : ''}" data-id="${t.id}">
+      <span class="drag-handle">\u2630</span>
+      <div class="priority-dot priority-${t.priority || 'normal'}"></div>
+      <div class="todo-check ${t.done ? 'checked' : ''}" onclick="toggleDone('${t.id}')"></div>
+      <span class="todo-text">${t.text}</span>
+      ${t.done
+        ? `<span class="todo-done-tag">\u2714 \u5DF2\u5B8C\u6210</span>`
+        : `<span class="todo-date" onclick="cycleDateEdit('${t.id}')" title="\u70B9\u51FB\u5207\u6362\u65E5\u671F">${fmtKey(t.dateKey)}</span>`
+      }
+    </div>
+  `).join('')
+
+  if (sortable) sortable.destroy()
+  sortable = Sortable.create(list, {
+    handle: '.drag-handle', animation: 150,
+    ghostClass: 'sortable-ghost', chosenClass: 'sortable-chosen',
+    onEnd(evt) {
+      const ids = filtered.map(t => t.id)
+      const movedId = ids[evt.oldIndex]
+      ids.splice(evt.oldIndex, 1)
+      ids.splice(evt.newIndex, 0, movedId)
+      todos.sort((a, b) => {
+        const ai = ids.indexOf(a.id), bi = ids.indexOf(b.id)
+        if (ai === -1 && bi === -1) return 0
+        if (ai === -1) return 1
+        if (bi === -1) return -1
+        return ai - bi
+      })
+      save()
+    }
+  })
+}
+
+async function toggleDone(id) {
+  const t = todos.find(t => t.id === id)
+  if (t) { t.done = !t.done; await save(); render() }
+}
+
+async function cycleDateEdit(id) {
+  const t = todos.find(t => t.id === id)
+  if (!t) return
+  const cur = new Date(t.dateKey + 'T00:00:00')
+  cur.setDate(cur.getDate() + 1)
+  t.dateKey = `${cur.getFullYear()}-${String(cur.getMonth()+1).padStart(2,'0')}-${String(cur.getDate()).padStart(2,'0')}`
+  await save(); render()
+}
+
+function showAddInput() {
+  document.getElementById('btnAdd').style.visibility = 'hidden'
+  document.getElementById('addRow').classList.add('visible')
+  setTimeout(() => document.getElementById('addInput').focus(), 50)
+}
+function hideAddInput() {
+  document.getElementById('btnAdd').style.visibility = ''
+  document.getElementById('addRow').classList.remove('visible')
+  document.getElementById('addInput').value = ''
+  document.getElementById('dateInput').value = todayKey()
+  document.getElementById('prioritySelect').value = 'normal'
+}
+async function confirmAdd() {
+  const text = document.getElementById('addInput').value.trim()
+  if (!text) { hideAddInput(); return }
+  const priority = document.getElementById('prioritySelect').value
+  const dateKey  = document.getElementById('dateInput').value || todayKey()
+  todos.push({ id: Date.now().toString(), text, done: false, priority, dateKey })
+  await save(); render(); hideAddInput()
+}
+function handleAddKey(e) {
+  if (e.key === 'Enter') confirmAdd()
+  if (e.key === 'Escape') hideAddInput()
+}
+
+load()
+</script>
+</body>
+</html>

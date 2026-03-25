@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>阶段目标</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<style>
+  body { width: 100%; min-width: 200px; }
+  .widget { height: 100vh; display: flex; flex-direction: column; }
+  .goal-list { padding: 0 10px 10px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto; flex: 1; }
+
+  .goal-card { background: rgba(0,0,0,0.055); border: 1px solid rgba(0,0,0,0.06); border-radius: 10px; padding: 10px 10px 8px; }
+  .goal-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+  .goal-text { font-size: 13px; font-weight: 600; flex: 1; cursor: pointer; }
+  .goal-text-input { font-size: 13px; font-weight: 600; flex: 1; border: none; border-bottom: 1.5px solid var(--color-orange); background: transparent; outline: none; color: var(--text-primary); padding: 0; font-family: var(--font); min-width: 0; }
+  .goal-pct { font-size: 12px; font-weight: 700; color: var(--color-orange); flex-shrink: 0; cursor: pointer; }
+  .goal-pct:hover { color: var(--color-purple); }
+  .btn-goal-del { font-size: 13px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; opacity: 0; transition: opacity 0.12s; padding: 0 2px; }
+  .goal-card:hover .btn-goal-del { opacity: 1; }
+  .btn-goal-del:hover { color: var(--color-red); }
+
+  .progress-track { height: 6px; background: rgba(0,0,0,0.08); border-radius: 3px; overflow: hidden; cursor: grab; position: relative; margin-bottom: 8px; user-select: none; }
+  .progress-fill { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #f97316, #a78bfa); transition: width 0.3s; position: relative; pointer-events: none; max-width: 100%; }
+  .progress-fill.dragging { transition: none; }
+  .progress-track.dragging { cursor: grabbing; }
+  .progress-fill::after { content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.5), transparent); animation: shimmer 2.2s infinite; }
+  @keyframes shimmer { 0%{left:-60%} 100%{left:120%} }
+
+  .progress-edit { display: none; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .progress-edit.visible { display: flex; }
+  .progress-edit input[type=number] { width: 52px; font-size: 12px; padding: 3px 6px; border: 1.5px solid rgba(0,0,0,0.15); border-radius: 6px; background: transparent; outline: none; text-align: center; color: var(--text-primary); }
+  .progress-edit input[type=number]:focus { border-color: var(--color-orange); }
+  .btn-prog-done { font-size: 11px; padding: 3px 8px; background: var(--color-orange); color: white; border: none; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+
+  .subtasks { display: flex; flex-direction: column; gap: 3px; }
+  .subtask { display: flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 2px; border-radius: 5px; transition: background 0.1s; }
+  .subtask:hover { background: rgba(0,0,0,0.04); }
+  .subtask:hover .subtask-del { opacity: 1; }
+  .subtask-check { width: 13px; height: 13px; border-radius: 3px; border: 1.5px solid rgba(0,0,0,0.2); flex-shrink: 0; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.12s; }
+  .subtask-check.done { background: var(--color-green); border-color: var(--color-green); }
+  .subtask-check.done::after { content: ''; width: 6px; height: 4px; border-left: 1.5px solid white; border-bottom: 1.5px solid white; transform: rotate(-45deg) translateY(-1px); }
+  .subtask-text { flex: 1; color: var(--text-secondary); line-height: 1.3; }
+  .subtask-text.done { text-decoration: line-through; color: var(--text-tertiary); }
+  .subtask-del { font-size: 11px; color: var(--text-tertiary); cursor: pointer; opacity: 0; transition: opacity 0.12s; padding: 0 2px; }
+  .subtask-del:hover { color: var(--color-red); }
+
+  .btn-add-sub { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; padding: 3px 2px; border-radius: 5px; transition: color 0.12s, opacity 0.15s; margin-top: 2px; opacity: 0; }
+  .goal-card:hover .btn-add-sub { opacity: 1; }
+  .btn-add-sub:hover { color: var(--color-orange); }
+  .sub-input-row { display: none; gap: 4px; align-items: center; margin-top: 4px; }
+  .sub-input-row.visible { display: flex; }
+  .sub-input-row input { flex: 1; font-size: 11px; padding: 4px 8px; }
+  .btn-sub-ok { font-size: 11px; padding: 4px 8px; background: var(--color-orange); color: white; border: none; border-radius: 5px; cursor: pointer; white-space: nowrap; }
+
+  .add-goal-area { padding: 0 10px 10px; }
+  .add-goal-row { display: none; gap: 6px; align-items: center; margin-top: 6px; }
+  .add-goal-row.visible { display: flex; }
+  .btn-confirm { padding: 6px 10px; background: var(--color-orange); color: white; border: none; border-radius: 6px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="titlebar">
+    <span class="titlebar-title">🎯 阶段目标</span>
+    <button class="btn-pin" id="btnPin" onclick="togglePin()" title="固定在最上层">📌</button>
+    <div class="opacity-slider-wrap" title="调节透明度">
+      <span class="opacity-icon">◐</span>
+      <input class="opacity-slider" id="opacitySlider" type="range" min="0.15" max="1" step="0.01" value="0.72">
+    </div>
+    <div class="titlebar-dots">
+      <button class="dot close" onclick="window.api.closeWindow()" title="关闭"></button>
+      <button class="dot min"   onclick="window.api.minimizeWindow()" title="最小化"></button>
+      <button class="dot max"   onclick="toggleOpacitySlider()" title="透明度"></button>
+    </div>
+  </div>
+  <div class="goal-list" id="goalList"></div>
+  <div class="add-goal-area">
+    <button class="btn-add" id="btnAddGoal" onclick="showAddGoal()"><span>＋</span><span>添加目标</span></button>
+    <div class="add-goal-row" id="addGoalRow">
+      <input class="input-inline" id="goalInput" placeholder="目标名称..." onkeydown="handleGoalKey(event)">
+      <button class="btn-confirm" onclick="confirmAddGoal()">确定</button>
+    </div>
+  </div>
+</div>
+<script src="../../shared/widget.js"></script>
+<script>
+let data = null, goals = [], editingProgress = null, editingSub = null
+let addingGoal = false
+
+async function load() {
+  data = await window.api.getData()
+  goals = data.goals || []
+  goals.forEach(g => { if (!g.subtasks) g.subtasks = [] })
+  render()
+}
+async function save() { data.goals = goals; await window.api.saveData(data) }
+
+function calcProgress(g) {
+  if (g.subtasks && g.subtasks.length > 0) {
+    const done = g.subtasks.filter(s => s.done).length
+    return Math.round(done / g.subtasks.length * 100)
+  }
+  return g.progress || 0
+}
+
+function render() {
+  document.getElementById('goalList').innerHTML = goals.map((g, gi) => {
+    const pct = calcProgress(g)
+    const subHtml = g.subtasks.map((s, si) => `
+      <div class="subtask">
+        <div class="subtask-check ${s.done ? 'done' : ''}" data-gi="${gi}" data-si="${si}"></div>
+        <span class="subtask-text ${s.done ? 'done' : ''}">${s.text}</span>
+        <span class="subtask-del" data-gi="${gi}" data-si="${si}">&times;</span>
+      </div>
+    `).join('')
+
+    return `
+    <div class="goal-card">
+      <div class="goal-header">
+        <span class="goal-text" data-gi="${gi}">${g.text}</span>
+        <span class="goal-pct" data-gi="${gi}">${pct}%</span>
+        <button class="btn-goal-del" data-gi="${gi}">&times;</button>
+      </div>
+      <div class="progress-track" data-gi="${gi}">
+        <div class="progress-fill" style="width:${pct}%"></div>
+      </div>
+      ${g.subtasks.length === 0 ? `
+      <div class="progress-edit ${editingProgress === gi ? 'visible' : ''}" id="pedit-${gi}">
+        <input type="number" min="0" max="100" value="${g.progress||0}" data-gi="${gi}" placeholder="0-100">
+        <button class="btn-prog-done" data-gi="${gi}">确定</button>
+      </div>` : ''}
+      <div class="subtasks">${subHtml}</div>
+      <div class="sub-input-row ${editingSub === gi ? 'visible' : ''}" id="subrow-${gi}">
+        <input class="input-inline" id="subinput-${gi}" placeholder="添加子任务..." style="font-size:11px;padding:4px 8px">
+        <button class="btn-sub-ok" data-gi="${gi}">确定</button>
+      </div>
+      <button class="btn-add-sub" data-gi="${gi}">+ 添加子任务</button>
+    </div>`
+  }).join('')
+
+  // 添加目标区域状态同步
+  const btnAdd = document.getElementById('btnAddGoal')
+  const addRow = document.getElementById('addGoalRow')
+  if (addingGoal) {
+    btnAdd.style.display = 'none'
+    addRow.classList.add('visible')
+  } else {
+    btnAdd.style.display = ''
+    addRow.classList.remove('visible')
+  }
+
+  // 进度条拖拽交互
+  document.querySelectorAll('.progress-track').forEach(el => {
+    const gi = parseInt(el.dataset.gi)
+    if (goals[gi]?.subtasks?.length > 0) return
+    el.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      const fill = el.querySelector('.progress-fill')
+      fill.classList.add('dragging')
+      el.classList.add('dragging')
+
+      const updatePct = (clientX) => {
+        const rect = el.getBoundingClientRect()
+        let pct = Math.round((clientX - rect.left) / rect.width * 100)
+        pct = Math.max(0, Math.min(100, pct))
+        fill.style.width = pct + '%'
+        const pctEl = el.closest('.goal-card').querySelector('.goal-pct')
+        if (pctEl) pctEl.textContent = pct + '%'
+        return pct
+      }
+
+      let lastPct = updatePct(e.clientX)
+
+      const onMove = (mv) => { lastPct = updatePct(mv.clientX) }
+      const onUp = async () => {
+        document.removeEventListener('mousemove', onMove)
+        document.removeEventListener('mouseup', onUp)
+        fill.classList.remove('dragging')
+        el.classList.remove('dragging')
+        goals[gi].progress = lastPct
+        await save()
+        // 只更新进度条显示，不重新 render 防止状态丢失
+        document.querySelectorAll('.progress-fill').forEach((f, idx) => {
+          const track = f.closest('.progress-track')
+          if (track && parseInt(track.dataset.gi) === gi) {
+            f.style.width = lastPct + '%'
+          }
+        })
+      }
+      document.addEventListener('mousemove', onMove)
+      document.addEventListener('mouseup', onUp)
+    })
+  })
+
+  // 点击百分比文字弹出精确输入框
+  document.querySelectorAll('.goal-pct').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const gi = parseInt(el.dataset.gi)
+      if (goals[gi].subtasks.length > 0) return
+      editingProgress = editingProgress === gi ? null : gi
+      render()
+      if (editingProgress === gi) setTimeout(() => document.querySelector(`#pedit-${gi} input`)?.focus(), 30)
+    })
+  })
+
+  document.querySelectorAll('.btn-prog-done').forEach(el => {
+    el.addEventListener('click', async () => {
+      const gi = parseInt(el.dataset.gi)
+      const input = document.querySelector(`#pedit-${gi} input`)
+      if (input) goals[gi].progress = Math.max(0, Math.min(100, parseInt(input.value) || 0))
+      editingProgress = null; await save(); render()
+    })
+  })
+
+  document.querySelectorAll('.progress-edit input[type=number]').forEach(el => {
+    el.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        const gi = parseInt(el.dataset.gi)
+        goals[gi].progress = Math.max(0, Math.min(100, parseInt(el.value) || 0))
+        editingProgress = null; await save(); render()
+      }
+      if (e.key === 'Escape') { editingProgress = null; render() }
+    })
+  })
+
+  document.querySelectorAll('.subtask-check').forEach(el => {
+    el.addEventListener('click', async () => {
+      const gi = parseInt(el.dataset.gi), si = parseInt(el.dataset.si)
+      goals[gi].subtasks[si].done = !goals[gi].subtasks[si].done
+      editingProgress = null
+      await save(); render()
+    })
+  })
+
+  document.querySelectorAll('.subtask-del').forEach(el => {
+    el.addEventListener('click', async () => {
+      const gi = parseInt(el.dataset.gi), si = parseInt(el.dataset.si)
+      goals[gi].subtasks.splice(si, 1)
+      editingProgress = null
+      await save(); render()
+    })
+  })
+
+  document.querySelectorAll('.btn-add-sub').forEach(el => {
+    el.addEventListener('click', () => {
+      const gi = parseInt(el.dataset.gi)
+      editingProgress = null
+      editingSub = editingSub === gi ? null : gi
+      render()
+      if (editingSub === gi) setTimeout(() => document.getElementById(`subinput-${gi}`)?.focus(), 50)
+    })
+  })
+
+  document.querySelectorAll('.btn-sub-ok').forEach(el => {
+    el.addEventListener('click', async () => {
+      const gi = parseInt(el.dataset.gi)
+      const input = document.getElementById(`subinput-${gi}`)
+      const text = input?.value.trim()
+      if (!text) return
+      goals[gi].subtasks.push({ id: Date.now().toString(), text, done: false })
+      editingSub = null
+      await save(); render()
+    })
+  })
+
+  goals.forEach((_, gi) => {
+    const input = document.getElementById(`subinput-${gi}`)
+    if (!input) return
+    input.addEventListener('keydown', async e => {
+      if (e.key === 'Enter') {
+        const text = input.value.trim()
+        if (!text) return
+        goals[gi].subtasks.push({ id: Date.now().toString(), text, done: false })
+        editingSub = null
+        await save(); render()
+      }
+      if (e.key === 'Escape') { editingSub = null; render() }
+    })
+  })
+
+  // 双击目标名字进入编辑
+  document.querySelectorAll('.goal-text').forEach(el => {
+    el.addEventListener('dblclick', (e) => {
+      e.stopPropagation()
+      const gi = parseInt(el.dataset.gi)
+      const input = document.createElement('input')
+      input.className = 'goal-text-input'
+      input.value = goals[gi].text
+      el.replaceWith(input)
+      input.focus()
+      input.select()
+      const commit = async () => {
+        const val = input.value.trim()
+        if (val && val !== goals[gi].text) {
+          goals[gi].text = val
+          await save()
+        }
+        render()
+      }
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit() }
+        if (e.key === 'Escape') render()
+      })
+      input.addEventListener('blur', commit)
+    })
+  })
+
+  document.querySelectorAll('.btn-goal-del').forEach(el => {
+    el.addEventListener('click', async () => {
+      const gi = parseInt(el.dataset.gi)
+      if (confirm(`确认删除「${goals[gi].text}」？`)) {
+        editingProgress = null; editingSub = null
+        goals.splice(gi, 1); await save(); render()
+      }
+    })
+  })
+}
+
+function showAddGoal() {
+  addingGoal = true
+  render()
+  setTimeout(() => document.getElementById('goalInput').focus(), 50)
+}
+function hideAddGoal() {
+  addingGoal = false
+  document.getElementById('goalInput').value = ''
+  render()
+}
+async function confirmAddGoal() {
+  const text = document.getElementById('goalInput').value.trim()
+  if (!text) { hideAddGoal(); return }
+  goals.push({ id: Date.now().toString(), text, progress: 0, subtasks: [] })
+  addingGoal = false
+  await save(); render()
+}
+function handleGoalKey(e) {
+  if (e.key === 'Enter') confirmAddGoal()
+  if (e.key === 'Escape') hideAddGoal()
+}
+
+load()
+</script>
+</body>
+</html>

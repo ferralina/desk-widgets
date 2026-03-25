@@ -1,0 +1,289 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+}
+
+:root {
+  --font: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+
+  /* 磨砂玻璃背景 */
+  --widget-alpha: 0.72;
+  --widget-bg: rgba(255, 255, 255, var(--widget-alpha));
+  --widget-blur: blur(24px);
+  --widget-border: 1px solid rgba(255, 255, 255, 0.55);
+  --widget-radius: 14px;
+  --widget-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+
+  /* 标题栏交通灯 */
+  --dot-close: #ff5f57;
+  --dot-min:   #febc2e;
+  --dot-max:   #28c840;
+
+  /* 语义色 */
+  --color-orange:  #f97316;
+  --color-purple:  #a78bfa;
+  --color-yellow:  #fbbf24;
+  --color-green:   #22c55e;
+  --color-blue:    #3b82f6;
+  --color-red:     #ef4444;
+
+  /* 文字 */
+  --text-primary:   rgba(0, 0, 0, 0.85);
+  --text-secondary: rgba(0, 0, 0, 0.45);
+  --text-tertiary:  rgba(0, 0, 0, 0.28);
+}
+
+body {
+  background: transparent;
+  font-family: var(--font);
+  color: var(--text-primary);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── 通用组件容器 ── */
+.widget {
+  background: var(--widget-bg);
+  backdrop-filter: var(--widget-blur);
+  -webkit-backdrop-filter: var(--widget-blur);
+  border: var(--widget-border);
+  border-radius: var(--widget-radius);
+  box-shadow: var(--widget-shadow);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  overflow: hidden;
+}
+
+.widget:hover {
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  /* 去掉 scale，避免吸附时抖动，改用更细腻的阴影变化 */
+}
+
+/* ── 标题栏 ── */
+.titlebar {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px 8px;
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.titlebar-dots {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  -webkit-app-region: no-drag;
+}
+
+/* macOS 风格彩色圆点，hover 显示功能图标 */
+.dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  transition: opacity 0.15s, filter 0.15s;
+  user-select: none;
+  position: relative;
+  padding: 0;
+}
+
+.dot.close  { background: var(--dot-close); }
+.dot.min    { background: var(--dot-min); }
+.dot.max    { background: var(--dot-max); }
+
+.dot:hover { opacity: 0.85; filter: brightness(1.1); }
+
+.dot::after {
+  position: absolute;
+  font-weight: 700;
+  opacity: 0;
+  transition: opacity 0.12s;
+  color: rgba(0,0,0,0.55);
+}
+.dot:hover::after { opacity: 1; }
+
+.dot.close::after { content: '\00D7'; font-size: 11px; line-height: 12px; }
+.dot.min::after   { content: '\2013'; font-size: 10px; line-height: 12px; }
+.dot.max::after   { content: '\25D0'; font-size: 7px;  line-height: 12px; }
+
+.titlebar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.titlebar-actions {
+  display: flex;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+}
+
+/* ── 固定置顶按钮 ── */
+.btn-pin {
+  background: none;
+  border: none;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0 2px;
+  color: var(--text-tertiary);
+  -webkit-app-region: no-drag;
+  transition: color 0.15s, transform 0.15s;
+  line-height: 1;
+  opacity: 0.5;
+}
+.btn-pin:hover { opacity: 1; color: var(--color-orange); }
+.btn-pin.pinned {
+  color: var(--color-orange);
+  opacity: 1;
+  transform: rotate(-45deg);
+}
+
+/* ── 内容区 ── */
+.widget-body {
+  padding: 0 12px 12px;
+  -webkit-app-region: no-drag;
+}
+
+/* ── 快速添加按钮 ── */
+.btn-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 7px 10px;
+  background: transparent;
+  border: 1.5px dashed rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-top: 8px;
+}
+
+.btn-add:hover {
+  border-color: var(--color-orange);
+  color: var(--color-orange);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+/* ── 输入框 ── */
+.input-inline {
+  width: 100%;
+  background: rgba(0, 0, 0, 0.04);
+  border: 1.5px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.input-inline:focus {
+  border-color: var(--color-orange);
+}
+
+/* ── 折叠动画 ── */
+.collapsible {
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+
+.collapsible.collapsed {
+  max-height: 0 !important;
+  opacity: 0;
+}
+
+/* ── 拖拽排序 ── */
+.drag-handle {
+  cursor: grab;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  padding: 0 4px;
+  transition: color 0.15s;
+}
+
+.drag-handle:hover { color: var(--text-secondary); }
+
+.sortable-ghost {
+  opacity: 0.35;
+  background: rgba(249, 115, 22, 0.08) !important;
+}
+
+.sortable-chosen {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* ── 滚动条 ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 2px;
+}
+
+/* 吸附状态由 main 进程 win.setOpacity() 控制，CSS 无需处理 */
+
+/* ── 透明度滑块 ── */
+.opacity-slider-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar:hover .opacity-slider-wrap,
+.opacity-slider-wrap.force-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.opacity-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 56px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(0, 0, 0, 0.18);
+  outline: none;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.opacity-slider:hover {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.opacity-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-orange);
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+  transition: transform 0.12s;
+}
+
+.opacity-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+.opacity-icon {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  line-height: 1;
+  user-select: none;
+}

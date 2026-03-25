@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>日历</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<style>
+  body { width: 280px; }
+  .widget { height: 100vh; display: flex; flex-direction: column; }
+  .titlebar { cursor: default; -webkit-app-region: drag; }
+
+  /* 折叠按钮 */
+  .btn-collapse { background: none; border: none; font-size: 12px; color: var(--text-tertiary); cursor: pointer; padding: 0 4px; -webkit-app-region: no-drag; transition: color 0.15s; }
+  .btn-collapse:hover { color: var(--text-primary); }
+
+  .cal-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; padding: 4px 12px 8px; }
+  .cal-nav button { background: none; border: none; color: var(--text-secondary); font-size: 18px; cursor: pointer; padding: 2px 8px; border-radius: 5px; transition: background 0.12s; -webkit-app-region: no-drag; }
+  .cal-nav button:hover { background: rgba(0,0,0,0.07); }
+  .cal-month { font-size: 13px; font-weight: 600; }
+
+  .cal-grid { display: grid; grid-template-columns: repeat(7,1fr); gap: 2px; padding: 0 10px; -webkit-app-region: no-drag; }
+  .cal-dow { text-align: center; font-size: 10px; font-weight: 600; color: var(--text-tertiary); padding: 3px 0 5px; }
+  .cal-day-wrap { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 3px 1px 3px; border-radius: 7px; cursor: pointer; transition: background 0.12s; }
+  .cal-day-wrap:hover:not(.today-wrap):not(.selected-wrap):not(.has-todo):not(.has-sched) { background: rgba(0,0,0,0.05); }
+  .cal-day-wrap.other-month .cal-day-num { color: var(--text-tertiary); }
+  .cal-day-wrap.today-wrap { background: var(--color-purple); }
+  .cal-day-wrap.today-wrap .cal-day-num { color: white; font-weight: 700; }
+  .cal-day-wrap.selected-wrap:not(.today-wrap) { outline: 1.5px solid var(--color-purple); }
+  .cal-day-wrap.selected-wrap:not(.today-wrap) .cal-day-num { color: var(--color-purple); font-weight: 600; }
+  /* 有待办：橙色浅底 */
+  .cal-day-wrap.has-todo:not(.today-wrap) { background: rgba(249,115,22,0.13); }
+  .cal-day-wrap.has-todo:not(.today-wrap) .cal-day-num { color: var(--color-orange); font-weight: 600; }
+  /* 有日程：蓝色浅底（优先级低于待办） */
+  .cal-day-wrap.has-sched:not(.has-todo):not(.today-wrap) { background: rgba(59,130,246,0.12); }
+  .cal-day-wrap.has-sched:not(.has-todo):not(.today-wrap) .cal-day-num { color: var(--color-blue); font-weight: 600; }
+  /* 两者都有：双色渐变底 */
+  .cal-day-wrap.has-todo.has-sched:not(.today-wrap) { background: linear-gradient(135deg, rgba(249,115,22,0.15), rgba(59,130,246,0.15)); }
+  .cal-day-num { font-size: 12px; line-height: 1; }
+  /* 小点保留但缩小，作为辅助标识 */
+  .cal-dots { display: flex; gap: 2px; min-height: 4px; }
+  .cal-dot { width: 3px; height: 3px; border-radius: 50%; }
+  .dot-todo     { background: var(--color-orange); }
+  .dot-schedule { background: var(--color-blue); }
+
+  /* 选中日期详情面板 */
+  .day-panel { border-top: 1px solid rgba(0,0,0,0.07); padding: 8px 12px 10px; -webkit-app-region: no-drag; }
+  .day-panel-title { font-size: 12px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+  .btn-add-schedule { font-size: 18px; line-height: 1; background: none; border: none; color: var(--color-orange); cursor: pointer; padding: 0; }
+
+  .day-items { display: flex; flex-direction: column; gap: 4px; max-height: 110px; overflow-y: auto; }
+  .day-item { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 6px; border-radius: 6px; background: rgba(0,0,0,0.03); }
+  .day-item-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .day-item-text { flex: 1; }
+  .day-item-time { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; }
+  .day-item-del { font-size: 12px; color: var(--text-tertiary); cursor: pointer; padding: 0 2px; opacity: 0; transition: opacity 0.12s; }
+  .day-item:hover .day-item-del { opacity: 1; }
+  .day-empty { font-size: 11px; color: var(--text-tertiary); text-align: center; padding: 8px 0; }
+
+  /* 添加日程输入 */
+  .schedule-input-row { display: none; gap: 4px; margin-top: 6px; }
+  .schedule-input-row.visible { display: flex; }
+  .schedule-input-row input { flex: 1; }
+  .schedule-input-row .time-input { width: 60px; flex: none; }
+  .btn-sched-ok { padding: 5px 10px; background: var(--color-blue); color: white; border: none; border-radius: 6px; font-size: 11px; cursor: pointer; white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="titlebar" id="titlebar">
+    <span class="titlebar-title">📅 日历</span>
+    <button class="btn-collapse" id="btnCollapse" title="折叠/展开">▾</button>
+    <button class="btn-pin" id="btnPin" onclick="togglePin()" style="-webkit-app-region:no-drag">📌</button>
+    <div class="opacity-slider-wrap" title="调节透明度">
+      <span class="opacity-icon">◐</span>
+      <input class="opacity-slider" id="opacitySlider" type="range" min="0.15" max="1" step="0.01" value="0.72">
+    </div>
+    <div class="titlebar-dots">
+      <button class="dot close" id="dotClose" title="关闭"></button>
+      <button class="dot min"   id="dotMin"   title="最小化"></button>
+      <button class="dot max" onclick="toggleOpacitySlider()" title="透明度"></button>
+    </div>
+  </div>
+
+  <div class="cal-body" id="calBody">
+    <div class="cal-nav">
+      <button id="btnPrev">‹</button>
+      <span class="cal-month" id="monthLabel"></span>
+      <button id="btnNext">›</button>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+
+    <!-- 选中日期详情 -->
+    <div class="day-panel" id="dayPanel" style="display:none">
+      <div class="day-panel-title">
+        <span id="dayPanelTitle"></span>
+        <button class="btn-add-schedule" id="btnAddSchedule" title="添加日程">＋</button>
+      </div>
+      <div class="schedule-input-row" id="scheduleInputRow">
+        <input class="input-inline" id="scheduleText" placeholder="日程内容..." style="font-size:12px;padding:5px 8px">
+        <input class="input-inline time-input" id="scheduleTime" type="time" style="font-size:12px;padding:5px 4px">
+        <button class="btn-sched-ok" onclick="confirmAddSchedule()">添加</button>
+      </div>
+      <div class="day-items" id="dayItems"></div>
+    </div>
+  </div>
+</div>
+
+<script src="../../shared/widget.js"></script>
+<script>
+const DOW    = ['日','一','二','三','四','五','六']
+const MONTHS = ['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月']
+const WK     = ['周日','周一','周二','周三','周四','周五','周六']
+const now    = new Date()
+
+let cur = new Date(now.getFullYear(), now.getMonth(), 1)
+let selectedDate = null
+let data = null
+let schedules = {}   // { 'YYYY-MM-DD': [{id, text, time}] }
+let todos = []
+
+// ── 折叠（resize 窗口） ──
+let collapsed = false
+document.getElementById('btnCollapse').addEventListener('click', async (e) => {
+  e.stopPropagation()
+  const tbH = document.getElementById('titlebar').offsetHeight
+  const result = await window.api.collapseWindow(tbH)
+  collapsed = result === 'collapsed'
+  document.getElementById('btnCollapse').textContent = collapsed ? '▸' : '▾'
+})
+
+document.getElementById('dotClose').addEventListener('click', e => { e.stopPropagation(); window.api.closeWindow() })
+document.getElementById('dotMin').addEventListener('click',   e => { e.stopPropagation(); window.api.minimizeWindow() })
+document.getElementById('btnPrev').addEventListener('click',  () => { cur.setMonth(cur.getMonth()-1); render() })
+document.getElementById('btnNext').addEventListener('click',  () => { cur.setMonth(cur.getMonth()+1); render() })
+
+// ── 数据 ──
+function dateKey(y, m, d) {
+  return `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+}
+
+async function load() {
+  data = await window.api.getData()
+  schedules = data.schedules || {}
+  todos     = data.todos     || []
+  render()
+}
+
+async function save() {
+  data.schedules = schedules
+  await window.api.saveData(data)
+}
+
+// ── 渲染月视图 ──
+function render() {
+  const year = cur.getFullYear(), month = cur.getMonth()
+  document.getElementById('monthLabel').textContent = `${year}年${MONTHS[month]}`
+
+  const firstDay    = new Date(year, month, 1).getDay()
+  const daysInMonth = new Date(year, month+1, 0).getDate()
+  const daysInPrev  = new Date(year, month, 0).getDate()
+
+  let html = DOW.map(d => `<div class="cal-dow">${d}</div>`).join('')
+
+  for (let i = 0; i < firstDay; i++) {
+    html += `<div class="cal-day-wrap other-month"><div class="cal-day-num">${daysInPrev - firstDay + 1 + i}</div><div class="cal-dots"></div></div>`
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const isToday = d===now.getDate() && month===now.getMonth() && year===now.getFullYear()
+    const isSel   = selectedDate && selectedDate.getDate()===d && selectedDate.getMonth()===month && selectedDate.getFullYear()===year
+    const key     = dateKey(year, month, d)
+    const hasSched = (schedules[key]?.length > 0)
+    const hasTodo  = todos.some(t => t.dateKey === key && !t.done)
+
+    const dots = [
+      hasTodo  ? `<div class="cal-dot dot-todo"></div>`     : '',
+      hasSched ? `<div class="cal-dot dot-schedule"></div>` : '',
+    ].join('')
+
+    html += `<div class="cal-day-wrap ${isToday?'today-wrap':''} ${isSel?'selected-wrap':''} ${hasTodo?'has-todo':''} ${hasSched?'has-sched':''}" data-d="${d}">
+      <div class="cal-day-num">${d}</div>
+      <div class="cal-dots">${dots}</div>
+    </div>`
+  }
+
+  const rem = 42 - firstDay - daysInMonth
+  for (let d = 1; d <= rem; d++) {
+    html += `<div class="cal-day-wrap other-month"><div class="cal-day-num">${d}</div><div class="cal-dots"></div></div>`
+  }
+
+  document.getElementById('calGrid').innerHTML = html
+
+  document.querySelectorAll('.cal-day-wrap:not(.other-month)').forEach(el => {
+    el.addEventListener('click', () => selectDay(parseInt(el.dataset.d)))
+  })
+
+  renderDayPanel()
+}
+
+// ── 选中日期 ──
+function selectDay(d) {
+  selectedDate = new Date(cur.getFullYear(), cur.getMonth(), d)
+  document.getElementById('dayPanel').style.display = 'block'
+  // 通知待办组件筛选该日期
+  const key = dateKey(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())
+  localStorage.setItem('cal-select-date', key)
+  render()
+}
+
+// ── 日期详情面板 ──
+function renderDayPanel() {
+  if (!selectedDate) return
+  const y = selectedDate.getFullYear()
+  const m = selectedDate.getMonth()
+  const d = selectedDate.getDate()
+  const key = dateKey(y, m, d)
+
+  document.getElementById('dayPanelTitle').textContent =
+    `${y}年${m+1}月${d}日 ${WK[selectedDate.getDay()]}`
+
+  const daySchedules = (schedules[key] || []).sort((a,b) => (a.time||'').localeCompare(b.time||''))
+  const dayTodos     = todos.filter(t => t.dateKey === key)
+
+  const items = [
+    ...dayTodos.map(t => ({
+      id: t.id, text: t.text, time: '', type: 'todo', done: t.done
+    })),
+    ...daySchedules.map(s => ({
+      id: s.id, text: s.text, time: s.time, type: 'schedule'
+    }))
+  ]
+
+  if (items.length === 0) {
+    document.getElementById('dayItems').innerHTML = `<div class="day-empty">暂无待办和日程</div>`
+    return
+  }
+
+  document.getElementById('dayItems').innerHTML = items.map(item => `
+    <div class="day-item">
+      <div class="day-item-dot" style="background:${item.type==='todo' ? 'var(--color-orange)' : 'var(--color-blue)'}${item.done ? ';opacity:0.35' : ''}"></div>
+      <span class="day-item-text" style="${item.done ? 'text-decoration:line-through;opacity:0.45' : ''}">${item.text}</span>
+      ${item.time ? `<span class="day-item-time">${item.time}</span>` : ''}
+      ${item.type === 'schedule' ? `<span class="day-item-del" data-key="${key}" data-id="${item.id}">×</span>` : ''}
+    </div>
+  `).join('')
+
+  document.querySelectorAll('.day-item-del').forEach(el => {
+    el.addEventListener('click', async () => {
+      const k = el.dataset.key
+      schedules[k] = (schedules[k]||[]).filter(s => s.id !== el.dataset.id)
+      if (!schedules[k].length) delete schedules[k]
+      await save(); render()
+    })
+  })
+}
+
+// ── 添加日程 ──
+document.getElementById('btnAddSchedule').addEventListener('click', () => {
+  const row = document.getElementById('scheduleInputRow')
+  const visible = row.classList.contains('visible')
+  row.classList.toggle('visible', !visible)
+  if (!visible) setTimeout(() => document.getElementById('scheduleText').focus(), 50)
+})
+
+document.getElementById('scheduleText').addEventListener('keydown', e => {
+  if (e.key === 'Enter') confirmAddSchedule()
+  if (e.key === 'Escape') document.getElementById('scheduleInputRow').classList.remove('visible')
+})
+
+async function confirmAddSchedule() {
+  if (!selectedDate) return
+  const text = document.getElementById('scheduleText').value.trim()
+  if (!text) return
+  const time = document.getElementById('scheduleTime').value
+  const key  = dateKey(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate())
+  if (!schedules[key]) schedules[key] = []
+  schedules[key].push({ id: Date.now().toString(), text, time })
+  document.getElementById('scheduleText').value = ''
+  document.getElementById('scheduleTime').value = ''
+  document.getElementById('scheduleInputRow').classList.remove('visible')
+  await save(); render()
+}
+
+load()
+</script>
+</body>
+</html>

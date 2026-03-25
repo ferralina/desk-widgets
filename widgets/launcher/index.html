@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>桌面文件夹</title>
+<link rel="stylesheet" href="../../shared/base.css">
+<style>
+  body { width: 240px; }
+  .widget { height: 100vh; display: flex; flex-direction: column; }
+  .folder-list { flex: 1; overflow-y: auto; padding: 0 8px 4px; }
+  .cat-header { display: flex; align-items: center; gap: 6px; padding: 6px 6px 4px; cursor: pointer; border-radius: 6px; transition: background 0.12s; -webkit-app-region: no-drag; user-select: none; }
+  .cat-header:hover { background: rgba(0,0,0,0.04); }
+  .cat-chevron { font-size: 10px; color: var(--text-tertiary); transition: transform 0.18s; flex-shrink: 0; }
+  .cat-chevron.open { transform: rotate(90deg); }
+  .cat-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); flex: 1; }
+  .cat-count { font-size: 10px; color: var(--text-tertiary); }
+  .btn-cat-del { font-size: 13px; color: var(--text-tertiary); background: none; border: none; cursor: pointer; padding: 0 2px; line-height: 1; transition: color 0.12s; }
+  .btn-cat-del:hover { color: var(--color-red); }
+  .cat-items { display: grid; grid-template-columns: repeat(4,1fr); gap: 4px; padding: 2px 2px 6px; overflow: hidden; max-height: 400px; transition: max-height 0.22s ease, opacity 0.18s ease; -webkit-app-region: no-drag; }
+  .cat-items.collapsed { max-height: 0; opacity: 0; pointer-events: none; }
+  .cat-items.drag-over { background: rgba(249,115,22,0.08); border-radius: 8px; outline: 2px dashed rgba(249,115,22,0.5); }
+  .app-item.draggable { cursor: grab; }
+  .app-item.dragging { opacity: 0.4; }
+  .drop-placeholder { grid-column: 1/-1; text-align: center; font-size: 11px; color: var(--text-tertiary); padding: 10px 0; }
+  .app-item { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 2px 5px; border-radius: 9px; cursor: pointer; transition: background 0.12s, transform 0.12s; position: relative; }
+  .app-item:hover { background: rgba(0,0,0,0.06); transform: scale(1.07); }
+  .app-item:hover .item-del { opacity: 1; }
+  .app-icon { width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; background: rgba(0,0,0,0.05); flex-shrink: 0; overflow: hidden; }
+  .app-icon img { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; }
+  .app-name { font-size: 9px; color: var(--text-secondary); text-align: center; word-break: break-all; line-height: 1.3; max-width: 48px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item-del { position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-red); color: white; font-size: 10px; line-height: 14px; text-align: center; opacity: 0; transition: opacity 0.12s; cursor: pointer; z-index: 2; }
+  .toolbar { padding: 6px 10px 10px; display: flex; gap: 6px; -webkit-app-region: no-drag; border-top: 1px solid rgba(0,0,0,0.06); }
+  .btn-toolbar { flex: 1; padding: 6px 0; font-size: 11px; font-weight: 500; background: rgba(0,0,0,0.05); border: none; border-radius: 7px; color: var(--text-secondary); cursor: pointer; transition: background 0.12s; }
+  .btn-toolbar:hover { background: rgba(249,115,22,0.12); color: var(--color-orange); }
+  .drop-hint { font-size: 10px; color: var(--text-tertiary); text-align: center; padding: 3px 0 5px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.25); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.visible { display: flex; }
+  .modal { background: rgba(255,255,255,0.96); border-radius: 12px; padding: 16px; width: 180px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); }
+  .modal h4 { font-size: 13px; margin-bottom: 10px; }
+  .modal input { width: 100%; padding: 7px 10px; border: 1.5px solid rgba(0,0,0,0.15); border-radius: 7px; font-size: 13px; outline: none; margin-bottom: 10px; }
+  .modal input:focus { border-color: var(--color-orange); }
+  .modal-btns { display: flex; gap: 8px; }
+  .modal-btns button { flex: 1; padding: 6px 0; border: none; border-radius: 7px; font-size: 12px; cursor: pointer; }
+  .btn-cancel { background: rgba(0,0,0,0.07); color: var(--text-secondary); }
+  .btn-ok { background: var(--color-orange); color: white; }
+</style>
+</head>
+<body>
+<div class="widget">
+  <div class="titlebar">
+    <span class="titlebar-title">📂 桌面文件夹</span>
+    <button class="btn-pin" id="btnPin" onclick="togglePin()">📌</button>
+    <div class="opacity-slider-wrap" title="调节透明度">
+      <span class="opacity-icon">◐</span>
+      <input class="opacity-slider" id="opacitySlider" type="range" min="0.15" max="1" step="0.01" value="0.72">
+    </div>
+    <div class="titlebar-dots">
+      <button class="dot close" onclick="window.api.closeWindow()" title="关闭"></button>
+      <button class="dot min"   onclick="window.api.minimizeWindow()" title="最小化"></button>
+      <button class="dot max"   onclick="toggleOpacitySlider()" title="透明度"></button>
+    </div>
+  </div>
+  <div class="folder-list" id="folderList"></div>
+  <div class="drop-hint">将文件 / 文件夹拖入下方分类</div>
+  <div class="toolbar">
+    <button class="btn-toolbar" onclick="showAddCat()">+ 新建分类</button>
+    <button class="btn-toolbar" id="btnEdit" onclick="toggleEdit()">编辑</button>
+  </div>
+</div>
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <h4>新建分类</h4>
+    <input id="catNameInput" placeholder="分类名称" maxlength="12"
+           onkeydown="if(event.key==='Enter')confirmAddCat(); if(event.key==='Escape')hideModal()">
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="hideModal()">取消</button>
+      <button class="btn-ok"     onclick="confirmAddCat()">确认</button>
+    </div>
+  </div>
+</div>
+<script src="../../shared/widget.js"></script>
+<script>
+const ICON_MAP = {
+  chrome:'\uD83C\uDF10', firefox:'\uD83E\uDD8A', edge:'\uD83C\uDF10', brave:'\uD83E\uDD81',
+  code:'\uD83D\uDC99', cursor:'\uD83E\uDD16', idea:'\u2615', pycharm:'\uD83D\uDC0D', webstorm:'\uD83C\uDF0A',
+  wechat:'\uD83D\uDCAC', weixin:'\uD83D\uDCAC', dingtalk:'\uD83D\uDCF1', feishu:'\uD83EDD6', lark:'\uD83EDD6',
+  slack:'\uD83D\uDCAC', discord:'\uD83C\uDFAE', zoom:'\uD83D\uDCF9', teams:'\uD83D\uDC65',
+  explorer:'\uD83D\uDCC1', notepad:'\uD83D\uDCDD', calc:'\uD83E\uDDEE',
+  word:'\uD83D\uDCC4', excel:'\uD83D\uDCCA', powerpoint:'\uD83D\uDCD1', onenote:'\uD83D\uDCD3',
+  photoshop:'\uD83C\uDFA8', illustrator:'\u270F\uFE0F', figma:'\uD83C\uDFA8', sketch:'\uD83D\uDC8E',
+  steam:'\uD83C\uDFAE', epic:'\uD83C\uDFAE', vlc:'\uD83C\uDFAC', spotify:'\uD83C\uDFB5', netease:'\uD83C\uDFB5',
+  git:'\uD83D\uDD27', postman:'\uD83D\uDCEE', docker:'\uD83D\uDC33',
+}
+function getIcon(name) {
+  const n = name.toLowerCase().replace(/[\s\-_.]/g, '')
+  for (const [k, v] of Object.entries(ICON_MAP)) { if (n.includes(k)) return v }
+  return '\uD83D\uDCE6'
+}
+function getBaseName(fullPath) {
+  const base = fullPath.replace(/\\/g, '/').split('/').pop()
+  return base.replace(/\.(exe|lnk|url|bat|cmd)$/i, '')
+}
+let data = null, folders = [], editMode = false
+async function load() {
+  data = await window.api.getData()
+  folders = data.folders || [
+    { id: 'work',  name: '\u5DE5\u4F5C',  open: true,  items: [] },
+    { id: 'tools', name: '\u5DE5\u5177',  open: true,  items: [] },
+    { id: 'fun',   name: '\u5A31\u4E50',  open: false, items: [] },
+  ]
+  render()
+}
+async function save() { data.folders = folders; await window.api.saveData(data) }
+function render() {
+  document.getElementById('btnEdit').textContent = editMode ? '\u5B8C\u6210' : '\u7F16\u8F91'
+  document.getElementById('folderList').innerHTML = folders.map((cat, ci) => `
+    <div class="cat-section">
+      <div class="cat-header" data-ci="${ci}">
+        <span class="cat-chevron ${cat.open ? 'open' : ''}">\u25B6</span>
+        <span class="cat-name">${cat.name}</span>
+        <span class="cat-count">${cat.items.length}</span>
+        ${editMode ? `<button class="btn-cat-del" data-del-ci="${ci}">\u2715</button>` : ''}
+      </div>
+      <div class="cat-items ${cat.open ? '' : 'collapsed'}" id="zone-${ci}" data-ci="${ci}">
+        ${cat.items.length === 0 && cat.open
+          ? `<div class="drop-placeholder">\u62D6\u5165\u6587\u4EF6\u6216\u6587\u4EF6\u5939</div>`
+          : cat.items.map((item, ii) => `
+            <div class="app-item ${editMode ? 'draggable' : ''}"
+                 data-ci="${ci}" data-ii="${ii}" title="${item.path}"
+                 draggable="${editMode ? 'true' : 'false'}">
+              ${editMode ? `<div class="item-del" data-del-ci="${ci}" data-del-ii="${ii}">\u00D7</div>` : ''}
+              <div class="app-icon">${item.icon && item.icon.startsWith('data:') ? `<img src="${item.icon}" draggable="false">` : item.icon}</div>
+              <div class="app-name">${item.name}</div>
+            </div>`).join('')
+        }
+      </div>
+    </div>`).join('')
+  document.querySelectorAll('.cat-header').forEach(el => {
+    el.addEventListener('click', e => {
+      if (e.target.closest('.btn-cat-del')) return
+      const ci = parseInt(el.dataset.ci)
+      folders[ci].open = !folders[ci].open; save(); render()
+    })
+  })
+  document.querySelectorAll('.btn-cat-del').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation()
+      const ci = parseInt(el.dataset.delCi)
+      if (confirm('\u5220\u9664\u5206\u7C7B\uFF1F')) { folders.splice(ci, 1); save(); render() }
+    })
+  })
+  document.querySelectorAll('.item-del').forEach(el => {
+    el.addEventListener('click', e => {
+      e.stopPropagation()
+      folders[parseInt(el.dataset.delCi)].items.splice(parseInt(el.dataset.delIi), 1)
+      save(); render()
+    })
+  })
+  document.querySelectorAll('.app-item').forEach(el => {
+    el.addEventListener('click', () => {
+      if (editMode) return
+      const item = folders[parseInt(el.dataset.ci)].items[parseInt(el.dataset.ii)]
+      window.api.openApp(item.path)
+    })
+  })
+  let dragSrc = null
+  document.querySelectorAll('.app-item.draggable').forEach(el => {
+    el.addEventListener('dragstart', e => {
+      dragSrc = { ci: parseInt(el.dataset.ci), ii: parseInt(el.dataset.ii) }
+      el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/x-internal-move', '1')
+    })
+    el.addEventListener('dragend', () => { el.classList.remove('dragging'); dragSrc = null })
+  })
+  document.querySelectorAll('.cat-items').forEach((zone) => {
+    const ci = parseInt(zone.dataset.ci)
+    zone.addEventListener('dragenter', e => { e.preventDefault(); zone.classList.add('drag-over') })
+    zone.addEventListener('dragover',  e => { e.preventDefault() })
+    zone.addEventListener('dragleave', e => { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag-over') })
+    zone.addEventListener('drop', async e => {
+      e.preventDefault(); zone.classList.remove('drag-over')
+      if (e.dataTransfer.getData('text/x-internal-move') === '1' && dragSrc) {
+        const { ci: srcCi, ii: srcIi } = dragSrc
+        if (srcCi === ci) return
+        const [moved] = folders[srcCi].items.splice(srcIi, 1)
+        folders[ci].items.push(moved); dragSrc = null; await save(); render(); return
+      }
+      const files = e.dataTransfer.files
+      if (!files.length) return
+      for (const f of files) {
+        let p = (f.path || f.name || '').replace(/\//g, '\\')
+        if (!p) continue
+        const name = getBaseName(p)
+        if (!name) continue
+        if (folders[ci].items.find(i => i.name === name)) continue
+        const item = { name, path: '', icon: '\u23F3' }
+        folders[ci].items.push(item); await save(); render()
+        const result = await window.api.copyFileIn(p)
+        if (result && !result.error) {
+          item.path = result.localPath; item.icon = result.dataUrl || getIcon(name)
+        } else {
+          const idx = folders[ci].items.indexOf(item)
+          if (idx !== -1) folders[ci].items.splice(idx, 1)
+          alert(result?.error || '\u6587\u4EF6\u590D\u5236\u5931\u8D25')
+        }
+        await save(); render()
+      }
+    })
+  })
+}
+function toggleEdit() { editMode = !editMode; render() }
+function showAddCat() {
+  document.getElementById('modalOverlay').classList.add('visible')
+  setTimeout(() => document.getElementById('catNameInput').focus(), 50)
+}
+function hideModal() {
+  document.getElementById('modalOverlay').classList.remove('visible')
+  document.getElementById('catNameInput').value = ''
+}
+async function confirmAddCat() {
+  const name = document.getElementById('catNameInput').value.trim()
+  if (!name) return
+  folders.push({ id: Date.now().toString(), name, open: true, items: [] })
+  await save(); render(); hideModal()
+}
+async function refreshIcons() {
+  let changed = false
+  for (const cat of folders) {
+    for (const item of cat.items) {
+      if (item.path && (!item.icon || !item.icon.startsWith('data:'))) {
+        const dataUrl = await window.api.getFileIcon(item.path)
+        if (dataUrl) { item.icon = dataUrl; changed = true }
+      }
+    }
+  }
+  if (changed) { await save(); render() }
+}
+load().then(() => refreshIcons())
+</script>
+</body>
+</html>
