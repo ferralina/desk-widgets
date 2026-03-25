@@ -146,6 +146,11 @@ async function load() {
   render()
 }
 
+// 监听待办变化，重新拉取数据刷新日历标记
+window.addEventListener('storage', e => {
+  if (e.key === 'todo-updated') load()
+})
+
 async function save() {
   data.schedules = schedules
   await window.api.saveData(data)

@@ -30,6 +30,10 @@
   .todo-date { font-size: 10px; color: var(--text-tertiary); flex-shrink: 0; cursor: pointer; padding: 2px 5px; border-radius: 4px; transition: background 0.12s; }
   .todo-date:hover { background: rgba(0,0,0,0.06); }
   .todo-done-tag { font-size: 9px; color: var(--color-green); background: rgba(34,197,94,0.1); padding: 1px 6px; border-radius: 8px; flex-shrink: 0; font-weight: 600; letter-spacing: 0.03em; }
+  .todo-del { font-size: 14px; color: var(--text-tertiary); cursor: pointer; padding: 0 2px; opacity: 0; transition: opacity 0.12s; flex-shrink: 0; line-height: 1; }
+  .todo-item:hover .todo-del { opacity: 1; }
+  .todo-del:hover { color: var(--color-red); }
+  .todo-text-input { flex: 1; font-size: 13px; border: none; border-bottom: 1.5px solid var(--color-orange); background: transparent; outline: none; color: var(--text-primary); padding: 0; font-family: var(--font); min-width: 0; }
 
   .add-area { padding: 4px 8px 10px; }
   #btnAdd { opacity: 0; transition: opacity 0.18s ease; }
@@ -162,12 +166,13 @@ function render() {
     <div class="todo-item ${t.done ? 'done' : ''}" data-id="${t.id}">
       <span class="drag-handle">\u2630</span>
       <div class="priority-dot priority-${t.priority || 'normal'}"></div>
-      <div class="todo-check ${t.done ? 'checked' : ''}" onclick="toggleDone('${t.id}')"></div>
-      <span class="todo-text">${t.text}</span>
+      <div class="todo-check ${t.done ? 'checked' : ''}" data-id="${t.id}"></div>
+      <span class="todo-text" data-id="${t.id}" title="\u53CC\u51FB\u7F16\u8F91">${t.text}</span>
       ${t.done
         ? `<span class="todo-done-tag">\u2714 \u5DF2\u5B8C\u6210</span>`
-        : `<span class="todo-date" onclick="cycleDateEdit('${t.id}')" title="\u70B9\u51FB\u5207\u6362\u65E5\u671F">${fmtKey(t.dateKey)}</span>`
+        : `<span class="todo-date" data-id="${t.id}" title="\u70B9\u51FB\u5207\u6362\u65E5\u671F">${fmtKey(t.dateKey)}</span>`
       }
+      <span class="todo-del" data-id="${t.id}" title="\u5220\u9664">&times;</span>
     </div>
   `).join('')
 
@@ -189,6 +194,47 @@ function render() {
       })
       save()
     }
+  })
+
+  // 勾选
+  list.querySelectorAll('.todo-check').forEach(el => {
+    el.addEventListener('click', () => toggleDone(el.dataset.id))
+  })
+
+  // 日期循环
+  list.querySelectorAll('.todo-date').forEach(el => {
+    el.addEventListener('click', () => cycleDateEdit(el.dataset.id))
+  })
+
+  // 删除
+  list.querySelectorAll('.todo-del').forEach(el => {
+    el.addEventListener('click', async () => {
+      todos = todos.filter(t => t.id !== el.dataset.id)
+      await save()
+      render()
+      localStorage.setItem('todo-updated', Date.now().toString())
+    })
+  })
+
+  // 双击文字编辑
+  list.querySelectorAll('.todo-text').forEach(el => {
+    el.addEventListener('dblclick', () => {
+      const id = el.dataset.id
+      const t = todos.find(t => t.id === id)
+      if (!t) return
+      const input = document.createElement('input')
+      input.className = 'todo-text-input'
+      input.value = t.text
+      el.replaceWith(input)
+      input.focus(); input.select()
+      const commit = async () => {
+        const val = input.value.trim()
+        if (val && val !== t.text) { t.text = val; await save(); localStorage.setItem('todo-updated', Date.now().toString()) }
+        render()
+      }
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit() } if (e.key === 'Escape') render() })
+      input.addEventListener('blur', commit)
+    })
   })
 }
 
@@ -225,6 +271,8 @@ async function confirmAdd() {
   const dateKey  = document.getElementById('dateInput').value || todayKey()
   todos.push({ id: Date.now().toString(), text, done: false, priority, dateKey })
   await save(); render(); hideAddInput()
+  // 通知日历刷新
+  localStorage.setItem('todo-updated', Date.now().toString())
 }
 function handleAddKey(e) {
   if (e.key === 'Enter') confirmAdd()
